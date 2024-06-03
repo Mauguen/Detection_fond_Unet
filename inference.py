@@ -19,7 +19,7 @@ def parse_args():
         description='Make segmentation predicitons'
     )
     parser.add_argument(
-        '--model', type=str, default='UNet10.pt',
+        '--model', type=str, default='UNet20_02.06.pt',
         help='model to use for inference'
     )
     parser.add_argument(
@@ -89,9 +89,9 @@ if __name__ == '__main__':
     
     ### Résultats sur 1 exemple
     if exemple :
-        index_applied = np.random.randint(0, 400)
-        print('Index = ', index_applied)
-        # index_applied = 27
+        # index_applied = np.random.randint(0, 400)
+        # print('Index = ', index_applied)
+        index_applied = 0
         freq_visu = 0
         t_ini = time.time()
     

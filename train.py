@@ -23,11 +23,11 @@ def parse_args():
     """parse command line arguments"""
     parser = argparse.ArgumentParser(description='Train image segmentation')
     parser.add_argument(
-        '--batch-size', type=int, default=10, metavar='N',
+        '--batch-size', type=int, default=5, metavar='N',
         help='input batch size for training (default: 3)'
     )
     parser.add_argument(
-        '--test-batch-size', type=int, default=10, metavar='N',
+        '--test-batch-size', type=int, default=5, metavar='N',
         help='input batch size for testing (default: 3)'
     )
     parser.add_argument(
@@ -130,7 +130,7 @@ def train(model, device, batch_size, optimizer, criterion, epoch):
         step+=1
         
     plt.figure()
-    plt.imshow(y_pred)
+    plt.imshow(np.array(y_pred))
     plt.show()
 
     return loss.item()
@@ -171,7 +171,7 @@ def validate(model, device, batch_size, criterion, n_classes):
     avg_iou = np.mean(class_iou)
     
     plt.figure()
-    plt.imshow(y_pred)
+    plt.imshow(np.array(y_pred))
     plt.show()
 
     print('\nValidation set: Average loss: {:.4f}, '.format(test_loss)
@@ -228,57 +228,57 @@ def get_model(args, device, in_channels):
 
 
 if __name__ == '__main__':
-    args = parse_args()
-    if args.tensorboard:
-        writer = SummaryWriter()
-    # initialize model
-    device = ('cuda' if torch.cuda.is_available() and not args.no_cuda else 'cpu')
-    print(device)
-    in_channels = 1
-    model, optimizer, model_dict = get_model(args, device, in_channels)
-    # define loss function
-    criterion = Binary_Cross_Entropy_Loss()
-    # train and evaluate model
-    start_epoch = 1 if not args.model else model_dict['total_epoch'] + 1
-    n_epoch = start_epoch + args.epochs - 1
-    model_path = os.getcwd() + '/models'
-    if not os.path.isdir(model_path):
-        os.mkdir(model_path)
-    model_name = f'models/{model.name}{n_epoch}.pt'
-    for epoch in range(start_epoch, n_epoch + 1):
-        t_ini = time.time()
-        train_loss = train(model, device, args.batch_size, optimizer, criterion, epoch)
-        test_loss, test_iou, test_pix_acc = validate(model, device, args.batch_size, criterion, args.n_classes)
-        # update tensorboard
-        if args.tensorboard:
-            writer.add_scalar('Loss/train', train_loss, epoch)
-            writer.add_scalar('Loss/test', test_loss, epoch)
-            writer.add_scalar('IOU/test', test_iou, epoch)
-            writer.add_scalar('Pixel_Accuracy/test', test_pix_acc, epoch)
-        # record training progress
-        model_dict['train_loss'].append(train_loss)
-        model_dict['test_loss'].append(test_loss)
-        model_dict['metrics']['IOU'].append(test_iou)
-        model_dict['metrics']['pix_acc'].append(test_pix_acc)
-        if epoch == 1 or test_iou > model_dict['metrics']['best']['IOU']:
-            model_dict['model_state_dict'] = model.state_dict()
-            model_dict['optimizer_state_dict'] = optimizer.state_dict()
-            model_dict['metrics']['best']['IOU'] = test_iou
-            model_dict['metrics']['best']['pix_acc'] = test_pix_acc
-            model_dict['metrics']['best']['epoch'] = epoch
-        if args.save:
-            torch.save(model_dict, model_name)
-        t_fin = time.time()
-        model_dict['epoch_duration'] = t_fin-t_ini
-        print('Epoch duration', t_fin - t_ini, '\n')
-    if args.tensorboard:
-        writer.close()
-    print('Best IOU:', model_dict['metrics']['best']['IOU'])
-    print('Pixel accuracy:', model_dict['metrics']['best']['pix_acc'])
+    # args = parse_args()
+    # if args.tensorboard:
+    #     writer = SummaryWriter()
+    # # initialize model
+    # device = ('cuda' if torch.cuda.is_available() and not args.no_cuda else 'cpu')
+    # print(device)
+    # in_channels = 1
+    # model, optimizer, model_dict = get_model(args, device, in_channels)
+    # # define loss function
+    # criterion = Binary_Cross_Entropy_Loss()
+    # # train and evaluate model
+    # start_epoch = 1 if not args.model else model_dict['total_epoch'] + 1
+    # n_epoch = start_epoch + args.epochs - 1
+    # model_path = os.getcwd() + '/models'
+    # if not os.path.isdir(model_path):
+    #     os.mkdir(model_path)
+    # model_name = f'models/{model.name}{n_epoch}.pt'
+    # for epoch in range(start_epoch, n_epoch + 1):
+    #     t_ini = time.time()
+    #     train_loss = train(model, device, args.batch_size, optimizer, criterion, epoch)
+    #     test_loss, test_iou, test_pix_acc = validate(model, device, args.batch_size, criterion, args.n_classes)
+    #     # update tensorboard
+    #     if args.tensorboard:
+    #         writer.add_scalar('Loss/train', train_loss, epoch)
+    #         writer.add_scalar('Loss/test', test_loss, epoch)
+    #         writer.add_scalar('IOU/test', test_iou, epoch)
+    #         writer.add_scalar('Pixel_Accuracy/test', test_pix_acc, epoch)
+    #     # record training progress
+    #     model_dict['train_loss'].append(train_loss)
+    #     model_dict['test_loss'].append(test_loss)
+    #     model_dict['metrics']['IOU'].append(test_iou)
+    #     model_dict['metrics']['pix_acc'].append(test_pix_acc)
+    #     if epoch == 1 or test_iou > model_dict['metrics']['best']['IOU']:
+    #         model_dict['model_state_dict'] = model.state_dict()
+    #         model_dict['optimizer_state_dict'] = optimizer.state_dict()
+    #         model_dict['metrics']['best']['IOU'] = test_iou
+    #         model_dict['metrics']['best']['pix_acc'] = test_pix_acc
+    #         model_dict['metrics']['best']['epoch'] = epoch
+    #     if args.save:
+    #         torch.save(model_dict, model_name)
+    #     t_fin = time.time()
+    #     model_dict['epoch_duration'] = t_fin-t_ini
+    #     print('Epoch duration', t_fin - t_ini, '\n')
+    # if args.tensorboard:
+    #     writer.close()
+    # print('Best IOU:', model_dict['metrics']['best']['IOU'])
+    # print('Pixel accuracy:', model_dict['metrics']['best']['pix_acc'])
 
-    model_dict = torch.load('models/UNet10.pt', map_location=torch.device('cpu'))
+    model_dict = torch.load('models/UNet20_02.06.pt', map_location=torch.device('cpu'))
     plt.figure()
-    epoques = np.arange(start=1, stop=11, step=1)
+    epoques = np.arange(start=1, stop=21, step=1)
     plt.plot(epoques, model_dict['train_loss'], label='Train loss')
     plt.plot(epoques, model_dict['test_loss'], label='Validation loss')
     plt.xticks(epoques)

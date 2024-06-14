@@ -19,7 +19,7 @@ def parse_args():
         description='Make segmentation predicitons'
     )
     parser.add_argument(
-        '--model', type=str, default='UNet20_02.06.pt',
+        '--model', type=str, default='UNet7.pt',
         help='model to use for inference'
     )
     parser.add_argument(
@@ -114,7 +114,7 @@ if __name__ == '__main__':
         checkpoint_path = os.getcwd() + f'/models/{args.model}'
         checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
         model = UNet(n_classes=2, in_channels=1)
-        model.load_state_dict(checkpoint['model_state_dict'])
+        # model.load_state_dict(checkpoint['model_state_dict'])
         # Prédiction
         pred = predict(image, model)[2:-2, 2:-2]
         t_fin = time.time()

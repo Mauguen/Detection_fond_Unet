@@ -12,6 +12,8 @@ from torchvision import transforms, datasets
 import numpy as np
 import matplotlib.pyplot as plt
 import time
+import psutil
+import random
 
 from unet import UNet
 from echograms import Echograms
@@ -23,15 +25,15 @@ def parse_args():
     """parse command line arguments"""
     parser = argparse.ArgumentParser(description='Train image segmentation')
     parser.add_argument(
-        '--batch-size', type=int, default=5, metavar='N',
+        '--batch-size', type=int, default=10, metavar='N',
         help='input batch size for training (default: 3)'
     )
     parser.add_argument(
-        '--test-batch-size', type=int, default=5, metavar='N',
+        '--test-batch-size', type=int, default=10, metavar='N',
         help='input batch size for testing (default: 3)'
     )
     parser.add_argument(
-        '--epochs', type=int, default=7, metavar='N',
+        '--epochs', type=int, default=1, metavar='N',
         help='number of epochs to train (default: 10)'
     )
     parser.add_argument(
@@ -81,7 +83,7 @@ def parse_args():
         help='save the current model'
     )
     parser.add_argument(
-        '--model', type=str, default=False,
+        '--model', type=str, default='UNet7.pt',
         help='model to retrain'
     )
     parser.add_argument(
@@ -91,8 +93,47 @@ def parse_args():
     args = parser.parse_args()
     return args
 
+def seed_worker(worker_id):
+    # worker_seed = torch.initial_seed() % 2 ** 32
+    # np.random.seed(worker_seed)
+    # random.seed(worker_seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
-def train(model, device, batch_size, optimizer, criterion, epoch):
+def get_trainloader(batch_size, num_worker):
+    data = Echograms()
+    n = len(data)
+    g = torch.Generator()
+    g.manual_seed(0)
+    train_dataloader = DataLoader(data,
+                                  batch_size=batch_size,
+                                  shuffle=True,
+                                  num_workers=num_worker,
+                                  worker_init_fn=seed_worker,
+                                  generator=g
+                                  )
+    return train_dataloader, n
+
+def get_validationloader(batch_size, num_worker):
+    data = Echograms(data_type='validate')
+    n = len(data)
+    g = torch.Generator()
+    g.manual_seed(0)
+    validation_dataloader = DataLoader(data,
+                                  batch_size=batch_size,
+                                  shuffle=True,
+                                  num_workers=num_worker,
+                                  worker_init_fn=seed_worker,
+                                  generator=g
+                                  )
+    return validation_dataloader, n
+
+def train(model, device, dataloader, optimizer, criterion, epoch, n):
     """train model for one epoch
 
     Args:
@@ -105,14 +146,9 @@ def train(model, device, batch_size, optimizer, criterion, epoch):
     """
     model.train()
     loss = 0.
-    data = Echograms(batch_size)
-    n = len(data)
-    step=0
-    for batch_start in range(0, n, batch_size):
-        # forward pass
-        sample = data[batch_start]
-        X = torch.tensor(sample['images']).to(device)
-        y = torch.tensor(sample['labels']).to(device).squeeze(1).long()  # remove channel dimension
+    for step, sample in enumerate(dataloader):
+        X = sample['image'].to(device)
+        y = sample['label'].to(device).squeeze(1).long()  # remove channel dimension
         y_pred = model.double()(X)
 
         # back propogation
@@ -128,15 +164,11 @@ def train(model, device, batch_size, optimizer, criterion, epoch):
                 epoch, (step+1) * len(X), n,
                 100. * (step+1)* len(X) / n, loss.item()))
         step+=1
-        
-    plt.figure()
-    plt.imshow(np.array(y_pred))
-    plt.show()
 
     return loss.item()
 
 
-def validate(model, device, batch_size, criterion, n_classes):
+def validate(model, device, dataloader, criterion, n_classes, n):
     """Evaluate model performance with validation data
 
     Args:
@@ -150,15 +182,11 @@ def validate(model, device, batch_size, criterion, n_classes):
     test_loss = 0
     class_iou = [0.] * n_classes
     pixel_acc = 0.
-    data = Echograms(batch_size, data_type='validate')
-    n = len(data)
     with torch.no_grad():
-        for batch_start in range(0, n, batch_size):
-            sample = data[batch_start]
-            X = torch.tensor(sample['images']).to(device)
-            y = torch.tensor(sample['labels']).to(device)
-            y = y.squeeze(1).long()  # remove channel dimension
-            y_pred = model(X)
+        for step, sample in enumerate(dataloader):
+            X = sample['image'].to(device)
+            y = sample['label'].to(device).squeeze(1).long()  # remove channel dimension
+            y_pred = model.double()(X)
             test_loss += criterion(y_pred, y).item()  # sum up batch loss
             pred = torch.argmax(y_pred, dim=1)
             pred = pred.view(X.shape[0], -1)
@@ -169,10 +197,6 @@ def validate(model, device, batch_size, criterion, n_classes):
 
     test_loss /= n
     avg_iou = np.mean(class_iou)
-    
-    plt.figure()
-    plt.imshow(np.array(y_pred))
-    plt.show()
 
     print('\nValidation set: Average loss: {:.4f}, '.format(test_loss)
         + 'Average IOU score: {:.2f}, '.format(avg_iou)
@@ -219,25 +243,42 @@ def get_model(args, device, in_channels):
                 (initialize new model if none is given)
         device (str): device to train and evaluate model ('cpu' or 'cuda')
     """
-    model_dict = initialize_model(args)
+    if args.model:
+        # Load model checkpoint
+        model_path = os.path.join(os.getcwd(), f'models/{args.model}')
+        model_dict = torch.load(model_path)
+    else:
+        model_dict = initialize_model(args)
+    # model_dict = initialize_model(args)
     n_classes = model_dict['n_classes']
+
     model = UNet(n_classes, in_channels).cuda() if device == 'cuda' else UNet(
         n_classes, in_channels)
     optimizer = optim.Adam(model.parameters(), args.lr)
     return model, optimizer, model_dict
 
+def get_memory_usage():
+    process = psutil.Process(os.getpid())
+    mem_info = process.memory_info()
+    return mem_info.rss
 
 if __name__ == '__main__':
     # args = parse_args()
     # if args.tensorboard:
     #     writer = SummaryWriter()
+    # # Prevent nondeterministic algorithms
+    # torch.backends.cudnn.benchmark = False
+    # torch.use_deterministic_algorithms(True)
     # # initialize model
-    # device = ('cuda' if torch.cuda.is_available() and not args.no_cuda else 'cpu')
+    # device = ("cuda:0" if torch.cuda.is_available() and not args.no_cuda else 'cpu')
     # print(device)
     # in_channels = 1
     # model, optimizer, model_dict = get_model(args, device, in_channels)
     # # define loss function
     # criterion = Binary_Cross_Entropy_Loss()
+    # # dataloader
+    # trainloader, n_train = get_trainloader(args.batch_size, args.num_workers)
+    # validationloader, n_validation = get_validationloader(args.batch_size, args.num_workers)
     # # train and evaluate model
     # start_epoch = 1 if not args.model else model_dict['total_epoch'] + 1
     # n_epoch = start_epoch + args.epochs - 1
@@ -245,10 +286,11 @@ if __name__ == '__main__':
     # if not os.path.isdir(model_path):
     #     os.mkdir(model_path)
     # model_name = f'models/{model.name}{n_epoch}.pt'
+    # t_tot = 0
     # for epoch in range(start_epoch, n_epoch + 1):
     #     t_ini = time.time()
-    #     train_loss = train(model, device, args.batch_size, optimizer, criterion, epoch)
-    #     test_loss, test_iou, test_pix_acc = validate(model, device, args.batch_size, criterion, args.n_classes)
+    #     train_loss = train(model, device, trainloader, optimizer, criterion, epoch, n_train)
+    #     test_loss, test_iou, test_pix_acc = validate(model, device, validationloader, criterion, args.n_classes, n_validation)
     #     # update tensorboard
     #     if args.tensorboard:
     #         writer.add_scalar('Loss/train', train_loss, epoch)
@@ -271,14 +313,17 @@ if __name__ == '__main__':
     #     t_fin = time.time()
     #     model_dict['epoch_duration'] = t_fin-t_ini
     #     print('Epoch duration', t_fin - t_ini, '\n')
+    #     t_tot += t_fin - t_ini
     # if args.tensorboard:
     #     writer.close()
     # print('Best IOU:', model_dict['metrics']['best']['IOU'])
     # print('Pixel accuracy:', model_dict['metrics']['best']['pix_acc'])
+    # print('Complete training duration : ', t_tot)
+    # print(f"Utilisation de la mémoire à la fin du script : {get_memory_usage() / (1024 ** 2):.2f} MB")
 
-    model_dict = torch.load('models/UNet20_02.06.pt', map_location=torch.device('cpu'))
+    model_dict = torch.load('models/UNet7.pt', map_location=torch.device('cpu'))
     plt.figure()
-    epoques = np.arange(start=1, stop=21, step=1)
+    epoques = np.arange(start=1, stop=8, step=1)
     plt.plot(epoques, model_dict['train_loss'], label='Train loss')
     plt.plot(epoques, model_dict['test_loss'], label='Validation loss')
     plt.xticks(epoques)

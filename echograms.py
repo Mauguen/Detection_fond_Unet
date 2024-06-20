@@ -19,20 +19,18 @@ class Echograms(Dataset):
         """
         self.root_dir = os.getcwd() if not root_dir else root_dir
         path = os.path.join(self.root_dir, f'data{freq}')
-        self.data_type = data_type
         self.n_classes = 2
         self.pad = pad
         
-        if self.data_type == 'train':
+        if data_type == 'train':
             self.imgs_path = os.path.join(path, 'train-volume.h5')
-        elif self.data_type == 'validate':
+        elif data_type == 'validate':
             self.imgs_path = os.path.join(path, 'validation-volume.h5')
-        elif self.data_type == 'param':
+        elif data_type == 'param':
             self.imgs_path = os.path.join(path, 'parametrage-volume.h5')
             
         with h5py.File(self.imgs_path, 'r') as h5file:
-            images = da.from_array(h5file['images'])
-            labels = h5file['labels']
+            images = da.from_array(h5file['images'], chunks=(-1, -1, 100, 100))
             self.n = images.shape[0]
             self.n_channels = images.shape[1]
 

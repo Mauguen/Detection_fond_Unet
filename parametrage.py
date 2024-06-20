@@ -15,10 +15,10 @@ import time
 import psutil
 import random
 
-# from unet import UNet
-# from echograms import Echograms
-# from metric import iou, pix_acc
-# from loss import Binary_Cross_Entropy_Loss
+from unet import UNet
+from echograms import Echograms
+from metric import iou, pix_acc
+from loss import Binary_Cross_Entropy_Loss
 
 
 def parse_args():
@@ -182,73 +182,62 @@ def get_memory_usage():
 
 if __name__ == '__main__':
     args = parse_args()
-    # if args.tensorboard:
-    #     writer = SummaryWriter()
-    # # initialize model
-    # device = ('cuda' if torch.cuda.is_available() and not args.no_cuda else 'cpu')
-    # print(device)
-    # in_channels = 1
-    # # define loss function
-    # criterion = Binary_Cross_Entropy_Loss()
-    # lr =0.000001
-    # losses_train = []
-    # lrs = []
+    if args.tensorboard:
+        writer = SummaryWriter()
+    # initialize model
+    device = ('cuda' if torch.cuda.is_available() and not args.no_cuda else 'cpu')
+    print(device)
+    in_channels = 1
+    # define loss function
+    criterion = Binary_Cross_Entropy_Loss()
+    lr =0.0000001
+    losses_train = []
+    lrs = []
     # durations = []
-    # while lr < 0.0001:
-    #     model, optimizer, model_dict = get_model(args, device, in_channels, lr)
-    #     for batch_size in np.arange(5, 65, 5):
-    #         # dataloader
-    #         trainloader, n_train = get_trainloader(int(batch_size), args.num_workers)
-    #         # train and evaluate model
-    #         start_epoch = 1 if not args.model else model_dict['total_epoch'] + 1
-    #         n_epoch = start_epoch + args.epochs - 1
-    #         t_ini = time.time()
-    #         losses_1model = []
-    #         for epoch in range(start_epoch, n_epoch + 1):
-    #             train_loss = train(model, device, trainloader, optimizer, criterion, epoch, n_train)
-    #             losses_1model.append(train_loss)
-    #             print(len(losses_1model))
-    #         t_fin = time.time()
-    #         durations.append(t_fin-t_ini)
-    #         losses_train.append(losses_1model)
-    #     lrs.append(lr)
-    #     lr = lr*10
-    # np.array(losses_train)
-    # np.save('/home/lenais/detection_fond/param', losses_train, allow_pickle=True)
+    while lr <= 0.1:
+        model, optimizer, model_dict = get_model(args, device, in_channels, lr)
+        for batch_size in np.arange(5, 65, 5):
+            # dataloader
+            trainloader, n_train = get_trainloader(int(batch_size), args.num_workers)
+            # train and evaluate model
+            start_epoch = 1 if not args.model else model_dict['total_epoch'] + 1
+            n_epoch = start_epoch + args.epochs - 1
+            t_ini = time.time()
+            losses_1model = []
+            for epoch in range(start_epoch, n_epoch + 1):
+                train_loss = train(model, device, trainloader, optimizer, criterion, epoch, n_train)
+                losses_1model.append(train_loss)
+                print(len(losses_1model))
+            t_fin = time.time()
+            # durations.append(t_fin-t_ini)
+            losses_train.append(losses_1model)
+        lrs.append(lr)
+        lr = lr*10
+    np.array(losses_train)
+    np.save('/home/lenais/detection_fond/param', losses_train, allow_pickle=True)
     # np.save('/home/lenais/detection_fond/durations', durations, allow_pickle=True)
 
-    losses_train = np.load('E:/PFE/Codes_backup/Extraction_fond/UNet-_final/param.npy')
-    print(losses_train.shape)
-    durations = np.load('E:/PFE/Codes_backup/Extraction_fond/UNet-_final/durations.npy')
-    print(durations.shape)
+    # losses_train = np.load('/home/lenais/detection_fond/param.npy')
+    # print(losses_train.shape)
     epoques = np.arange(start=1, stop=args.epochs + 1, step=1)
-    # print(lrs)
-    lrs = np.array([0.0000001, 0.000001, 0.00001, 0.0001, 0.001, 0.01])
+    # lrs = [0.0001, 0.001, 0.01]
 
     i = 0
-    fig, axs = plt.subplots(2, 3, sharex=True)
-    plt.tight_layout()
-    for j, lr in enumerate(lrs):
+    for lr in lrs:
+        plt.figure()
         for batch_size in np.arange(5, 65, 5):
-            if batch_size != 5 :
-                axs[j//3, j%3].plot(epoques, losses_train[i], label='Batch_size = '+str(batch_size))
+            plt.plot(epoques, losses_train[i], label='Batch_size = '+str(batch_size))
             i+=1
-        axs[j//3, j%3].set_title("Training losses  lr = " + str(lr))
-        if j%3 == 0:
-            axs[j//3, j%3].set_ylabel('Loss')
-        if j >= 3:
-            plt.xticks(epoques)
-            axs[j//3, j%3].set_xlabel('Epochs')
-        if lr == 0.01:
-            plt.legend()
+        plt.xticks(epoques)
+        plt.legend()
+        plt.xlabel('Epochs')
+        plt.ylabel('Loss')
+        plt.title("Training losses  lr = "+str(lr))
 
-    plt.figure()
-    plt.plot(np.arange(10, 65, 5), durations[:len(np.arange(10, 65, 5))])
-    plt.ylabel('Duration of training (s)')
-    plt.xlabel('Batch size')
-    plt.title("Training durations")
-
-    # print(np.sum(durations))
+    # plt.figure()
+    # plt.plot(durations)
+    # plt.ylabel('Duration of training (s)')
+    # plt.title("Training durations")
 
     plt.show()
     print('Done')

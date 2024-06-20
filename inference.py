@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 import argparse
 import torch
@@ -10,6 +11,11 @@ import time
 from sklearn.metrics import confusion_matrix, f1_score, ConfusionMatrixDisplay
 from matplotlib.colors import ListedColormap, BoundaryNorm
 import h5py
+import matplotlib
+matplotlib.use('TkAgg')
+from joblib import Parallel, delayed
+from functools import partial
+
 
 from unet import UNet
 import matplotlib.colors as colors
@@ -19,7 +25,7 @@ def parse_args():
         description='Make segmentation predicitons'
     )
     parser.add_argument(
-        '--model', type=str, default='UNet7.pt',
+        '--model', type=str, default='UNet100_120.pt',
         help='model to use for inference'
     )
     parser.add_argument(
@@ -83,107 +89,104 @@ def visualize(image, pred, label=None):
         plt.colorbar(imgplot3, orientation='horizontal', ticks=[0,1])
     fig.tight_layout()
 
+def process_image(image, label, model):
+    pred = predict(image, model)[2:-2, 2:-2]
+    return pred.flatten(), label.flatten()
+
+def process_batch(images_batch, labels_batch, model):
+    process_image_with_model = partial(process_image, model=model)
+    results = Parallel(n_jobs=-1)(delayed(process_image_with_model)(image, label) for image, label in zip(images_batch, labels_batch))
+    return results
+
 if __name__ == '__main__':
     args = parse_args()
-    exemple = True
-    
-    ### Résultats sur 1 exemple
-    if exemple :
-        # index_applied = np.random.randint(0, 400)
+    exemple = False
+    label_on = True
+    # path = '/home1/datawork/lmauguen/Data_fond/data_test/test-volume.h5'
+    path = os.getcwd() + '/data_FAROFA3_200kHz/validation-volume.h5'
+
+    # Load model once
+    checkpoint_path = os.path.join(os.getcwd(), f'models/{args.model}')
+    checkpoint = torch.load(checkpoint_path)
+    model = UNet(n_classes=2, in_channels=1)
+    model.load_state_dict(checkpoint['model_state_dict'])
+
+    if exemple:
+        # index_applied = np.random.randint(0, 7000)
         # print('Index = ', index_applied)
-        index_applied = 0
+        index_applied = 88
         freq_visu = 0
         t_ini = time.time()
-    
-        # load images and labels
-        label_on = True
-        if label_on:
-            path = os.getcwd() + '/data/train-volume.h5'
-            with h5py.File(path, 'r') as h5file :
-                images = h5file['images']
+
+        with h5py.File(path, 'r') as h5file:
+            images = h5file['images']
+            # fig = plt.figure(figsize=(15, 15))
+            # for i in range(1+index_applied, 101):
+            #     ax = fig.add_subplot(10, 10, i)
+            #     ax.imshow(images[i][freq_visu])  # Exemple de données
+            #     ax.set_title(f'Subplot {i}')
+            # plt.tight_layout()
+            # plt.show()
+
+            if label_on:
                 labels = h5file['labels']
                 image = images[index_applied]
                 label = labels[index_applied][0]
-        else:
-            path = os.getcwd() + '/data/train-volume.h5'
-            with h5py.File(path, 'r') as h5file :
-                images = h5file['images']
+            else:
                 image = images[index_applied]
-    
-        # Load model
-        checkpoint_path = os.getcwd() + f'/models/{args.model}'
-        checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
-        model = UNet(n_classes=2, in_channels=1)
-        # model.load_state_dict(checkpoint['model_state_dict'])
-        # Prédiction
+
         pred = predict(image, model)[2:-2, 2:-2]
         t_fin = time.time()
-        print('Execusion time : ' + str("{:.2g}".format(t_fin - t_ini)) + ' s')
-    
+        print(f'Execution time: {t_fin - t_ini:.2g} s')
+
         if args.visualize:
             if label_on:
-                # visualize result
                 visualize(image[freq_visu], pred, label)
                 conf_matrix = confusion_matrix(label.flatten(), pred.flatten())
-                print('Matrice de confusion : '+str(conf_matrix))
-                disp = ConfusionMatrixDisplay(conf_matrix)
-                disp.plot()
-                f1_score = f1_score(label.flatten(), pred.flatten())
-                print('F1-score : '+str(f1_score))
-                print(np.max(np.array(pred.flatten()-label.flatten())))
+                print(f'Matrice de confusion: {conf_matrix}')
+                # disp = ConfusionMatrixDisplay(conf_matrix)
+                # disp.plot()
+                f1 = f1_score(label.flatten(), pred.flatten())
+                print(f'F1-score: {f1}')
             else:
-                # visualize result
                 visualize(image, pred)
-    
-    ### Résultats sur un jeu de donnée test
-    else :
-        freq_visu = 0
+    else:
+        batch_size = 100
         t_ini = time.time()
-    
-        # load images and labels
-        label_on = True
-        if label_on:
-            path = os.getcwd() + '/data/train-volume.h5'
-            with h5py.File(path, 'r') as h5file :
-                images = h5file['images']
+        with h5py.File(path, 'r') as h5file:
+            images = h5file['images'][:]
+            if label_on:
                 labels = h5file['labels']
                 n, c, h, w = images.shape
-                preds=np.zeros((n, h*w))
-                ground_truths=np.zeros((n, h*w))
-                for i in range(n):
-                    image = images[i]
-                    label = labels[i][0].T
-                    # Load model
-                    checkpoint_path = os.getcwd() + f'/models/{args.model}'
-                    checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
-                    model = UNet(n_classes=2, in_channels=1)
-                    model.load_state_dict(checkpoint['model_state_dict'])
-                    # Prédiction
-                    pred = predict(image, model)[2:-2, 2:-2]
-                    preds[i] = pred.flatten().reshape((-1,))
-                    ground_truths[i] = label.flatten().reshape((-1,))
-                conf_matrix = confusion_matrix(ground_truths.flatten(), preds.flatten())
-                disp = ConfusionMatrixDisplay(conf_matrix)
-                disp.plot()
-                f1_score = f1_score(ground_truths.flatten(), preds.flatten())
-                print('F1-score : '+str(f1_score))
-        else:
-            path = os.getcwd() + '/data/train-volume.h5'
-            with h5py.File(path, 'r') as h5file :
-                images = h5file['images']
-                preds=[]
+                cumulative_conf_matrix = np.zeros((2,2))
+                print(f"Loaded {n} images with shape ({c}, {h}, {w})")
+                for i in range(0, n, batch_size):
+                    print(f'Avancee : {i*100//n}%')
+                    images_batch = images[i:i + batch_size]
+                    labels_batch = labels[i:i + batch_size]
+                    results = process_batch(images_batch, labels_batch, model)
+
+                    for pred, ground_truth in results:
+                        conf_matrix = confusion_matrix(ground_truth, pred)      #, labels=list(range(h * w))
+                        cumulative_conf_matrix += conf_matrix
+
+                # disp = ConfusionMatrixDisplay(cumulative_conf_matrix)
+                # disp.plot()
+                print(f'Matrice de confusion: {cumulative_conf_matrix*100/np.sum(cumulative_conf_matrix)}')
+
+                precision = cumulative_conf_matrix[1, 1] / (cumulative_conf_matrix[1, 1] + cumulative_conf_matrix[1, 0])
+                recall = cumulative_conf_matrix[1, 1] / (cumulative_conf_matrix[1, 1] + cumulative_conf_matrix[0, 1])
+                # Calcul du F1-score
+                f1 = 2 * (precision * recall) / (precision + recall)
+                print(f'F1-score: {f1}')
+            else:
+                preds = []
                 for i in range(images.shape[0]):
                     image = images[i]
-                    # Load model
-                    checkpoint_path = os.getcwd() + f'/models/{args.model}'
-                    checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
-                    model = UNet(n_classes=2, in_channels=1)
-                    model.load_state_dict(checkpoint['model_state_dict'])
-                    # Prédiction
                     pred = predict(image, model)
                     preds.append(pred)
-                
+
         t_fin = time.time()
-        print('Execusion time : ' + str(np.round((t_fin - t_ini), 2)) + ' s')
-            
+        print(f'Execution time: {t_fin - t_ini:.2f} s')
+
     plt.show()

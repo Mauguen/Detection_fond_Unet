@@ -9,7 +9,7 @@ class UNet(torch.nn.Module):
     https://arxiv.org/pdf/1505.04597.pdf
     """
 
-    def __init__(self, n_classes, in_channels, batch_norm=False):
+    def __init__(self, n_classes, in_channels, batch_norm=True):
         """
         """
         self.name = 'UNet'
@@ -64,6 +64,9 @@ class UNet(torch.nn.Module):
             conv2 = nn.Conv2d(size, size, kernel_size=3, padding='same')
             relu = nn.ReLU(True)
             convs = [mpool, conv1, relu, conv2, relu]
+            if self.batch_norm:
+                b_norm = nn.BatchNorm2d(size)
+                convs = [mpool, conv1, b_norm, relu, conv2, b_norm, relu]
             if i == 0:
                 convs = convs[1:]
             block = nn.Sequential(*convs)
@@ -85,6 +88,9 @@ class UNet(torch.nn.Module):
             conv2 = nn.Conv2d(size, size, kernel_size=3, padding='same')
             relu = nn.ReLU(True)
             convs = [conv1, relu, conv2, relu]
+            if self.batch_norm:
+                b_norm = nn.BatchNorm2d(size)
+                convs = [conv1, b_norm, relu, conv2, b_norm, relu]
             convs = nn.Sequential(*convs)
             self.add_module(f'deconv{i+1}', convs)
             blocks.append({'up': up, 'conv': convs})
@@ -101,8 +107,6 @@ if __name__ == "__main__":
     n_channels = 1
     im = torch.randn(1, n_channels, 380, 380)
     model = UNet(n_classes=2, in_channels=n_channels)
-    torch.backends.cudnn.benchmark = False
-    torch.use_deterministic_algorithms(True)
 
     print(list(model.children()))
     import time

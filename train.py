@@ -2,14 +2,9 @@ import os
 import argparse
 
 import torch
-from torch.profiler import profile, record_function, ProfilerActivity
-import torch.multiprocessing as mp
 from torch import cuda
-from torch.nn.parallel import DistributedDataParallel
-from torch.distributed.optim import DistributedOptimizer
-import torch.distributed.rpc as rpc
+from torch.nn.parallel import DataParallel
 from torch.utils.data import DataLoader
-# from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms, datasets
 import numpy as np
 import matplotlib
@@ -29,15 +24,15 @@ def parse_args():
     """parse command line arguments"""
     parser = argparse.ArgumentParser(description='Train image segmentation')
     parser.add_argument(
-        '--batch-size', type=int, default=8, metavar='N',
+        '--batch-size', type=int, default=16, metavar='N',
         help='input batch size for training (default: 3)'
     )
     parser.add_argument(
-        '--test-batch-size', type=int, default=8, metavar='N',
+        '--test-batch-size', type=int, default=16, metavar='N',
         help='input batch size for testing (default: 3)'
     )
     parser.add_argument(
-        '--epochs', type=int, default=2, metavar='N',
+        '--epochs', type=int, default=10, metavar='N',
         help='number of epochs to train (default: 10)'
     )
     parser.add_argument(
@@ -87,7 +82,7 @@ def parse_args():
         help='save the current model'
     )
     parser.add_argument(
-        '--model', type=str, default='UNet7.pt',
+        '--model', type=str, default=None,
         help='model to retrain'
     )
     parser.add_argument(
@@ -141,7 +136,7 @@ def get_validationloader(batch_size, num_worker, freq):
                                   )
     return validation_dataloader, n
 
-def train(model, device, dataloader, optimizer, criterion, epoch, n, prof):
+def train(model, device, dataloader, optimizer, criterion, epoch, n):
     """train model for one epoch
 
     Args:
@@ -154,28 +149,21 @@ def train(model, device, dataloader, optimizer, criterion, epoch, n, prof):
     """
     model.train()
     loss = 0.
-    t_ini = time.time()
     for step, sample in enumerate(dataloader):
-        t_ep = time.time()
-        # print(t_ep-t_ini)
         X = sample['image'].to(device)
         y = sample['label'].to(device).squeeze(1).long()  # remove channel dimension
-        y_pred = model.double().to(device)(X)
-        # back propogation
-        loss = criterion(y_pred, y)
+
         optimizer.zero_grad()
+        y_pred = model.double().to(device)(X)
+        loss = criterion(y_pred, y)
         loss.backward()
         optimizer.step()
         # Affichage
-        log_interval = 1
-        if step % log_interval == 0:
-            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                epoch, (step+1) * len(X), n,
-                100. * (step+1)* len(X) / n, loss.item()))
-
-        t_ini = time.time()
-        prof.step()
-        time.sleep(0.1)  # Pause pour permettre à TensorBoard de capter les mises à jour
+        # log_interval = 1
+        # if step % log_interval == 0:
+        #     print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+        #         epoch, (step+1) * len(X), n,
+        #         100. * (step+1)* len(X) / n, loss.item()))
     return loss.item()
 
 def validate(model, device, dataloader, criterion, n_classes, n, epoch):
@@ -247,7 +235,7 @@ def find_free_port():
         s.bind(('', 0))
         return s.getsockname()[1]
 
-def get_model(args, device, in_channels, world_size, rank):
+def get_model(args, device, in_channels, world_size):
     """Intialize or load model checkpoint and intialize model and optimizer
 
     Args:
@@ -266,13 +254,12 @@ def get_model(args, device, in_channels, world_size, rank):
     n_classes = model_dict['n_classes']
 
     # Setup model
-    master_addr = os.environ['MASTER_ADDR']
-    master_port = os.environ['MASTER_PORT']
-    torch.distributed.init_process_group(backend='nccl', world_size=world_size, rank=rank, init_method=f'tcp://{master_addr}:{master_port}')
-    model = UNet(n_classes, in_channels).cuda() if device == 'cuda' else UNet(
-        n_classes, in_channels)
-    model = model.to(device)
-    model = DistributedDataParallel(model, device_ids=[device], output_device=device)
+    # master_addr = os.environ['MASTER_ADDR']
+    # master_port = os.environ['MASTER_PORT']
+    # torch.distributed.init_process_group(backend='nccl', init_method=f'tcp://{master_addr}:{master_port}', world_size=world_size)
+    model = UNet(n_classes, in_channels).cuda() if device == 'cuda' else UNet(n_classes, in_channels)
+    # model = DataParallel(model)
+    # model = model.to(device)
     # Setup optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     return model, optimizer, model_dict
@@ -282,38 +269,30 @@ def get_memory_usage():
     mem_info = process.memory_info()
     return mem_info.rss
 
-def train_model(rank, args, freq, world_size):
+def train_model(args, freq, world_size):
     # initialize model
-    device = (torch.device(f'cuda:{rank}') if torch.cuda.is_available() and not args.no_cuda else 'cpu')
-    torch.cuda.set_device(device)
+    device = (torch.device(f'cuda') if torch.cuda.is_available() and not args.no_cuda else 'cpu')
     in_channels = 1
-    model, optimizer, model_dict = get_model(args, device, in_channels, world_size, rank)
+    model, optimizer, model_dict = get_model(args, device, in_channels, world_size)
     # define loss function
     criterion = Binary_Cross_Entropy_Loss()
     # dataloader
-    trainloader, n_train = get_trainloader(args.batch_size, args.num_workers, freq[rank])
-    validationloader, n_validation = get_validationloader(args.batch_size, args.num_workers, freq[rank])
-    print(f'{device} : {freq[rank]}')
+    trainloader, n_train = get_trainloader(args.batch_size, args.num_workers, freq)
+    validationloader, n_validation = get_validationloader(args.batch_size, args.num_workers, freq)
+    print(f'{device} : {freq}kHz')
     # train and evaluate model
     start_epoch = 1 if not args.model else model_dict['total_epoch'] + 1
     n_epoch = start_epoch + args.epochs - 1
     model_path = os.getcwd() + '/models'
     if not os.path.isdir(model_path):
         os.mkdir(model_path)
-    model_name = f'models/{model.module.name}{n_epoch}_{freq[rank]}.pt'
+    model_name = f'models/{model.name}{n_epoch}_{freq}.pt'
     t_tot = 0
     test_loss_prev = 1000
-    prof = torch.profiler.profile(
-        activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-        schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=2),
-        on_trace_ready=torch.profiler.tensorboard_trace_handler('./log'),
-        # record_shapes=True,
-        # profile_memory=True,
-        # with_stack=True
-    )
     for epoch in range(start_epoch, n_epoch + 1):
+        print(f'Train Epoch : {epoch}/{n_epoch}')
         t_ini = time.time()
-        train_loss = train(model, device, trainloader, optimizer, criterion, epoch, n_train, prof)
+        train_loss = train(model, device, trainloader, optimizer, criterion, epoch, n_train)
         test_loss, test_iou, test_pix_acc = validate(model, device, validationloader, criterion, args.n_classes, n_validation, epoch)
         model_dict['train_loss'].append(train_loss)
         model_dict['test_loss'].append(test_loss)
@@ -329,35 +308,26 @@ def train_model(rank, args, freq, world_size):
             torch.save(model_dict, model_name)
         t_fin = time.time()
         model_dict['epoch_duration'] = t_fin-t_ini
-        print(f'Process {rank} - Epoch {epoch}')
-        print(f'Process {rank} - Epoch duration {t_fin - t_ini}\n')
         t_tot += t_fin - t_ini
-    print(prof.key_averages().table(sort_by="cuda_time_total"))
     print('Best IOU:', model_dict['metrics']['best']['IOU'])
     print('Pixel accuracy:', model_dict['metrics']['best']['pix_acc'])
-    print('Complete training duration : ', t_tot)
+    print(f'Complete training duration : {t_tot} s')
     print(f"Utilisation de la mémoire à la fin du script : {get_memory_usage() / (1024 ** 2):.2f} MB")
-    torch.distributed.destroy_process_group()
 
 if __name__ == '__main__':
-    # args = parse_args()
-    # world_size = torch.cuda.device_count()
-    # freq = ['18', '70']
-    # os.environ['MASTER_ADDR'] = 'supermicro3'
-    # os.environ['MASTER_PORT'] = f'{find_free_port()}'
-    # if world_size > 1:
-    #     print(f'Starting training with {world_size} GPUs')
-    #     mp.spawn(train_model, args=(args, freq, world_size), nprocs=world_size, join=True)
-    # else:
-    #     train_model(rank=0, args=args, freq=freq, world_size=world_size)
+    args = parse_args()
+    world_size = torch.cuda.device_count()
+    freq = '200'
+    os.environ['MASTER_ADDR'] = 'supermicro3'
+    os.environ['MASTER_PORT'] = f'{find_free_port()}'
+    train_model(args=args, freq=freq, world_size=world_size)
 
-
-    model_dict = torch.load(f'models/UNet13_38.pt')#, map_location=torch.device('cpu'))
+    model_dict = torch.load(f'models/UNet10_200.pt')#, map_location=torch.device('cpu'))
     plt.figure()
-    epoques = np.arange(start=1, stop=14, step=1)
+    epoques = np.arange(start=1, stop=11, step=1)
     plt.plot(epoques, model_dict['train_loss'], label='Train loss')
     plt.plot(epoques, model_dict['test_loss'], label='Validation loss')
-    # plt.xticks(epoques)
+    plt.xticks(epoques)
     plt.legend()
     plt.xlabel('Epochs')
     plt.ylabel('Loss')

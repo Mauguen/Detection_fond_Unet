@@ -82,7 +82,7 @@ class UNet(torch.nn.Module):
         expand_filters = self.filter_sizes[self.n_block - 2::-1]
         old = self.filter_sizes[-1]
         for i, size in enumerate(expand_filters):
-            up = nn.ConvTranspose2d(old, size, kernel_size=2, stride=2)
+            up = nn.ConvTranspose2d(old, size, kernel_size=3, stride=2)
             self.add_module(f'up{i+1}', up)
             conv1 = nn.Conv2d(old, size, kernel_size=3, padding='same')
             conv2 = nn.Conv2d(size, size, kernel_size=3, padding='same')

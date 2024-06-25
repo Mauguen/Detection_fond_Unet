@@ -25,7 +25,7 @@ def parse_args():
         description='Make segmentation predicitons'
     )
     parser.add_argument(
-        '--model', type=str, default='UNet100_120.pt',
+        '--model', type=str, default='UNet10_200_24.06.pt',
         help='model to use for inference'
     )
     parser.add_argument(
@@ -100,21 +100,23 @@ def process_batch(images_batch, labels_batch, model):
 
 if __name__ == '__main__':
     args = parse_args()
-    exemple = False
+    exemple = True
     label_on = True
-    # path = '/home1/datawork/lmauguen/Data_fond/data_test/test-volume.h5'
-    path = os.getcwd() + '/data_FAROFA3_200kHz/validation-volume.h5'
+    # path = os.getcwd() + '/data/train-volume.h5'
+    # vertical_res = 0.196416        #m/pix, SCOPES
+    path = os.getcwd() + '/data/test-volume.h5'
+    vertical_res = 0.0247472  # m/pix, FAROFA3
 
     # Load model once
     checkpoint_path = os.path.join(os.getcwd(), f'models/{args.model}')
-    checkpoint = torch.load(checkpoint_path)
+    checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
     model = UNet(n_classes=2, in_channels=1)
     model.load_state_dict(checkpoint['model_state_dict'])
 
     if exemple:
         # index_applied = np.random.randint(0, 7000)
         # print('Index = ', index_applied)
-        index_applied = 88
+        index_applied = 0
         freq_visu = 0
         t_ini = time.time()
 
@@ -138,18 +140,52 @@ if __name__ == '__main__':
         pred = predict(image, model)[2:-2, 2:-2]
         t_fin = time.time()
         print(f'Execution time: {t_fin - t_ini:.2g} s')
-
-        if args.visualize:
-            if label_on:
-                visualize(image[freq_visu], pred, label)
+        if label_on:
+            if np.any(np.unique(pred) != 0):
+                ## Confusion matrix
                 conf_matrix = confusion_matrix(label.flatten(), pred.flatten())
                 print(f'Matrice de confusion: {conf_matrix}')
                 # disp = ConfusionMatrixDisplay(conf_matrix)
                 # disp.plot()
+                ## F1-score
                 f1 = f1_score(label.flatten(), pred.flatten())
                 print(f'F1-score: {f1}')
+                ## Ping per ping difference
+                diff = np.array(pred-label)
+                diff2 = pred&label
+                diff3 = pred&~label
+                plt.figure()
+                im = plt.imshow(diff3, cmap='Reds')
+                plt.imshow(label, alpha=0.5)
+                plt.colorbar(im)
+                plt.show()
+                nb_elem_diff = (diff2 == 1).sum()
+                ligne_fond_non_detect = (diff == -1).sum()
+                # print(f'Pourcentage bien classifié = {(nb_elem_diff*100/(diff.shape[0]*diff.shape[1])):.2f}%')
+                print(f'Ligne de fond non détecté : {ligne_fond_non_detect*100/np.array(label == 1).sum():.2f}%')
+                diff_ping = []
+                errors_squared = []
+                for i in range(pred.shape[1]):
+                    pred_non_fond = np.array(np.where(np.array(diff3[i])==1)).T
+                    fond_reel = np.array(np.where(np.array(label[i])==1)).T
+                    if len(pred_non_fond)!=0:
+                        differences = np.subtract(pred_non_fond, fond_reel)
+                        diff_ping.extend(differences)
+                        errors_squared.extend(differences ** 2)
+                moy = np.nanmean(np.array(diff_ping)) * vertical_res
+                print(f'Moyenne des écarts : {moy:.2f}m')
+                med = np.nanmedian(np.array(diff_ping)) * vertical_res
+                print(f'Médiane des écarts : {med:.2f}m')
+                std = np.nanstd(np.array(diff_ping)) * vertical_res
+                print(f'Écart-type des écarts : {std:.2f}m')
+                rmse = np.sqrt(np.nanmean(errors_squared)) * vertical_res
+                print(f'RMSE des écarts : {std:.2f}m')
             else:
-                visualize(image, pred)
+                print('No detection')
+        if args.visualize and label_on:
+            visualize(image[freq_visu], pred, label)
+        elif args.visualize :
+            visualize(image, pred)
     else:
         batch_size = 100
         t_ini = time.time()
@@ -160,25 +196,57 @@ if __name__ == '__main__':
                 n, c, h, w = images.shape
                 cumulative_conf_matrix = np.zeros((2,2))
                 print(f"Loaded {n} images with shape ({c}, {h}, {w})")
+
+                diff_ping = []
+                errors_squared = []
+                ligne_fond_non_detect = 0
+                ligne_fond_tot = 0
+                fond_pres = 0
                 for i in range(0, n, batch_size):
-                    print(f'Avancee : {i*100//n}%')
+                    print(f'Progress : {i*100//n}%')
                     images_batch = images[i:i + batch_size]
                     labels_batch = labels[i:i + batch_size]
                     results = process_batch(images_batch, labels_batch, model)
 
                     for pred, ground_truth in results:
-                        conf_matrix = confusion_matrix(ground_truth, pred)      #, labels=list(range(h * w))
-                        cumulative_conf_matrix += conf_matrix
-
-                # disp = ConfusionMatrixDisplay(cumulative_conf_matrix)
-                # disp.plot()
-                print(f'Matrice de confusion: {cumulative_conf_matrix*100/np.sum(cumulative_conf_matrix)}')
-
-                precision = cumulative_conf_matrix[1, 1] / (cumulative_conf_matrix[1, 1] + cumulative_conf_matrix[1, 0])
-                recall = cumulative_conf_matrix[1, 1] / (cumulative_conf_matrix[1, 1] + cumulative_conf_matrix[0, 1])
-                # Calcul du F1-score
-                f1 = 2 * (precision * recall) / (precision + recall)
-                print(f'F1-score: {f1}')
+                        if np.any(np.unique(pred) != 0):
+                            fond_pres +=1
+                            conf_matrix = confusion_matrix(ground_truth, pred)      #, labels=list(range(h * w))
+                            cumulative_conf_matrix += conf_matrix
+                            pred, ground_truth = pred.reshape((h, w)), ground_truth.reshape((h, w))
+                            diff = np.array(pred - ground_truth)
+                            # diff2 = pred & ground_truth
+                            diff3 = np.array(pred & ~ground_truth)
+                            ligne_fond_non_detect += np.sum(diff == -1)
+                            ligne_fond_tot += np.sum(ground_truth == 1)
+                            for i in range(w):
+                                # print(np.array(np.where(diff3[i]==1)).shape, np.array(np.where(ground_truth[i]==1)).shape)
+                                pred_non_fond = np.array(np.where(diff3[i] == 1)).T
+                                fond_reel = np.array(np.where(np.array(ground_truth[i]) == 1)).T
+                                if len(fond_reel) == 1 and len(pred_non_fond) != 0 :
+                                    differences = np.subtract(pred_non_fond, fond_reel)
+                                    diff_ping.extend(differences)
+                                    errors_squared.extend(differences ** 2)
+                if fond_pres != 0:
+                    print(f'Ligne de fond non détectée : {ligne_fond_non_detect * 100 / ligne_fond_tot:.2f}%')
+                    moy = np.nanmean(np.array(diff_ping, dtype=np.float32)) * vertical_res
+                    print(f'Moyenne des écarts : {moy:.2f}m')
+                    med = np.nanmedian(np.array(diff_ping, dtype=np.float32)) * vertical_res
+                    print(f'Médiane des écarts : {med:.2f}m')
+                    std = np.nanstd(np.array(diff_ping, dtype=np.float32)) * vertical_res
+                    print(f'Écart-type des écarts : {std:.2f}m')
+                    rmse = np.sqrt(np.nanmean(errors_squared, dtype=np.float32)) * vertical_res
+                    print(f'RMSE des écarts : {std:.2f}m')
+                    # disp = ConfusionMatrixDisplay(cumulative_conf_matrix)
+                    # disp.plot()
+                    print(f'Matrice de confusion: {cumulative_conf_matrix * 100 / np.sum(cumulative_conf_matrix)}')
+                    precision = cumulative_conf_matrix[1, 1] / (cumulative_conf_matrix[1, 1] + cumulative_conf_matrix[1, 0])
+                    recall = cumulative_conf_matrix[1, 1] / (cumulative_conf_matrix[1, 1] + cumulative_conf_matrix[0, 1])
+                    # Calcul du F1-score
+                    f1 = 2 * (precision * recall) / (precision + recall)
+                    print(f'F1-score: {f1}')
+                else :
+                    print('No detection')
             else:
                 preds = []
                 for i in range(images.shape[0]):

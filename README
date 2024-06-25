@@ -8,4 +8,4 @@ The aim of each of the scripts hereby provided is listed bellow :
 - train.py : training script. It calls all of the previous scripts to proceed with the training with parameters are defined in the parse_args() function
 - inference.py : script that is used to test the trained neural network both on both single samples and on a lot of samples
 The last two codes are the ones that you need to launch to create, train and test your own CNN U-Net. 
-The data furnished is a sample of 333kHz echograms collected during the SCOPES survey (https://doi.org/10.17600/18000662) performed by the IRD. 
+The data furnished is a sample of 200kHz echograms collected during the SCOPES survey (https://doi.org/10.17600/18000662) performed by the IRD. 

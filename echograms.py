@@ -10,7 +10,6 @@ import random
 class Echograms(Dataset):
     """ISBI 2012 EM Cell dataset.
     """
-    # '/home1/datawork/lmauguen/Data_fond/'
     def __init__(self, freq='', root_dir=None, data_type='train', pad=0):
         """
         Args:
@@ -28,24 +27,29 @@ class Echograms(Dataset):
             self.imgs_path = os.path.join(path, 'validation-volume.h5')
         elif data_type == 'param':
             self.imgs_path = os.path.join(path, 'parametrage-volume.h5')
+        elif data_type == 'test':
+            self.imgs_path = os.path.join(path, 'test-volume.h5')
             
         with h5py.File(self.imgs_path, 'r') as h5file:
             images = da.from_array(h5file['images'], chunks=(-1, -1, 100, 100))
-            self.n = images.shape[0]
+            self.shape = images.shape
+            # print(self.shape)
             self.n_channels = images.shape[1]
 
-            # Standard deviation and mean
-            self.mean = images.mean().compute()
-            self.std = images.std().compute()
+            # # Standard deviation and mean
+            # self.mean = images.mean().compute()
+            # self.std = images.std().compute()
 
     def __len__(self):
-        return self.n
+        return self.shape[0]
 
     def __getitem__(self, idx):
         with h5py.File(self.imgs_path, 'r') as h5file:
             ### Normalization
-            image = (h5file['images'][idx]- self.mean) / self.std
+            # image = (h5file['images'][idx]- self.mean) / self.std
+            image = h5file['images'][idx]/255           #donnees uint8
             label = h5file['labels'][idx]
+            c, h, w = self.shape[1], self.shape[2], self.shape[3]
 
             ### Padding
             n_channels = self.n_channels
@@ -53,7 +57,7 @@ class Echograms(Dataset):
             for i in range(n_channels):
                 channel.append(np.pad(image[i], pad_width=self.pad, mode='reflect'))
             image = np.array(channel)
-            sample = {'image':image, 'label':label}
+            sample = {'image':image, 'label':label, 'indice':idx, 'c':c, 'h':h, 'w':w}
 
         return sample
 
@@ -66,8 +70,8 @@ def seed_worker(worker_id):
     np.random.seed(worker_seed)
     random.seed(worker_seed)
 
-def get_dataloader(batch_size, num_worker):
-    data = Echograms()
+def get_dataloader(batch_size, num_worker, freq='200'):
+    data = Echograms(freq)
     g = torch.Generator()
     g.manual_seed(0)
     train_dataloader = DataLoader(data,
@@ -92,7 +96,7 @@ def visualize(image, mask):
     plt.show()
 
 
-if __name__ == '__main__':
+if _name_ == '_main_':
     batch_size = 5
     num_worker = 6
     dataloader = get_dataloader(batch_size, num_worker)

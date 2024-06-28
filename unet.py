@@ -7,6 +7,7 @@ class UNet(torch.nn.Module):
     "U-Net: Convolutional Networks for Biomedical Image Segmentation"
     by Olaf Ronneberger, Philipp Fischer, and Thomas Brox (2015)
     https://arxiv.org/pdf/1505.04597.pdf
+
     """
 
     def __init__(self, n_classes, in_channels, batch_norm=True):
@@ -50,8 +51,11 @@ class UNet(torch.nn.Module):
     def concat(self, x, y):
         """Crop and concatenate two feature maps
         """
-        x = x[:, :, :y.shape[2], :y.shape[3]]
-        return torch.cat((x, y), 1)
+        # x = x[:, :, :y.shape[2], :y.shape[3]]
+        diffy = x.size()[2] - y.size()[2]
+        diffx = x.size()[3] - y.size()[3]
+        y = nn.functional.pad(y, (diffx//2, diffx - diffx//2, diffy//2, diffy - diffy//2))
+        return torch.cat([x, y], dim=1)
 
     def contract(self):
         """Define contraction block in U-Net
@@ -103,9 +107,9 @@ class UNet(torch.nn.Module):
 ###############################################################################
 # For testing
 ###############################################################################
-if __name__ == "__main__":
+if _name_ == "_main_":
     n_channels = 1
-    im = torch.randn(1, n_channels, 380, 380)
+    im = torch.randn(4, n_channels, 808, 808)
     model = UNet(n_classes=2, in_channels=n_channels)
 
     print(list(model.children()))

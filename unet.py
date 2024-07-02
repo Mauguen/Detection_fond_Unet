@@ -7,7 +7,6 @@ class UNet(torch.nn.Module):
     "U-Net: Convolutional Networks for Biomedical Image Segmentation"
     by Olaf Ronneberger, Philipp Fischer, and Thomas Brox (2015)
     https://arxiv.org/pdf/1505.04597.pdf
-
     """
 
     def __init__(self, n_classes, in_channels, batch_norm=True):
@@ -107,7 +106,7 @@ class UNet(torch.nn.Module):
 ###############################################################################
 # For testing
 ###############################################################################
-if _name_ == "_main_":
+if __name__ == "__main__":
     n_channels = 1
     im = torch.randn(4, n_channels, 808, 808)
     model = UNet(n_classes=2, in_channels=n_channels)

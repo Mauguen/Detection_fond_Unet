@@ -96,7 +96,7 @@ def visualize(image, mask):
     plt.show()
 
 
-if _name_ == '_main_':
+if __name__ == '__main__':
     batch_size = 5
     num_worker = 6
     dataloader = get_dataloader(batch_size, num_worker)

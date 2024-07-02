@@ -14,6 +14,7 @@ import time
 import psutil
 import random
 import socket
+import matplotlib.colors as colors
 
 from unet import UNet
 from echograms import Echograms
@@ -152,18 +153,35 @@ def train(model, device, dataloader, optimizer, criterion, epoch, n):
     for step, sample in enumerate(dataloader):
         X = sample['image'].to(device)
         y = sample['label'].to(device).squeeze(1).long()  # remove channel dimension
-
         optimizer.zero_grad()
         y_pred = model.double().to(device)(X)
         loss = criterion(y_pred, y)
         loss.backward()
         optimizer.step()
         # Affichage
-        # log_interval = 1
-        # if step % log_interval == 0:
-        #     print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-        #         epoch, (step+1) * len(X), n,
-        #         100. * (step+1)* len(X) / n, loss.item()))
+        log_interval = 1
+        if step % log_interval == 0:
+            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                epoch, (step+1) * len(X), n,
+                100. * (step+1)* len(X) / n, loss.item()))
+        if np.round((100. * (step+1)* len(X) / n) % 20, 0) == 0.:       #epoch >= 9 and
+            pred = torch.argmax(y_pred, dim=1)[-1]
+            red_colors = plt.cm.Reds(np.linspace(0, 1, 256))
+            green_colors = plt.cm.Greens(np.linspace(0, 1, 256))
+            for i in range(red_colors.shape[0]):
+                alpha = i / (red_colors.shape[0] - 1)
+                red_colors[i, 3] = alpha  # Définition de l'alpha pour créer l'effet de fondu
+                green_colors[i, 3] = alpha
+            red_transparent = colors.LinearSegmentedColormap.from_list('RedTransparent', red_colors)
+            green_transparent = colors.LinearSegmentedColormap.from_list('GreenTransparent', green_colors)
+
+            plt.figure()
+            plt.imshow(X[-1][0].cpu().detach().numpy())
+            plt.imshow(pred.cpu().detach().numpy(), cmap=red_transparent)
+            plt.imshow(y[-1].cpu().detach().numpy(), cmap=green_transparent)
+            plt.show()
+            print(f'Detection : {np.count_nonzero(pred.cpu().detach().numpy()) * 100 / np.count_nonzero(y.cpu().detach().numpy())}%')
+
     return loss.item()
 
 def validate(model, device, dataloader, criterion, n_classes, n, epoch):
@@ -309,6 +327,18 @@ def train_model(args, freq, world_size):
         t_fin = time.time()
         model_dict['epoch_duration'] = t_fin-t_ini
         t_tot += t_fin - t_ini
+
+        plt.figure()
+        epoques = np.arange(start=1, stop=epoch+1, step=1)
+        plt.plot(epoques, model_dict['train_loss'], label='Train loss')
+        plt.plot(epoques, model_dict['test_loss'], label='Validation loss')
+        plt.legend()
+        plt.xlabel('Epochs')
+        plt.ylabel('Loss')
+        plt.title("Training and validation losses ")
+        plt.show()
+
+        print('Done')
     print('Best IOU:', model_dict['metrics']['best']['IOU'])
     print('Pixel accuracy:', model_dict['metrics']['best']['pix_acc'])
     print(f'Complete training duration : {t_tot} s')
@@ -322,15 +352,15 @@ if __name__ == '__main__':
     os.environ['MASTER_PORT'] = f'{find_free_port()}'
     train_model(args=args, freq=freq, world_size=world_size)
 
-    model_dict = torch.load(f'models/UNet10_200.pt')#, map_location=torch.device('cpu'))
-    plt.figure()
-    epoques = np.arange(start=1, stop=11, step=1)
-    plt.plot(epoques, model_dict['train_loss'], label='Train loss')
-    plt.plot(epoques, model_dict['test_loss'], label='Validation loss')
-    plt.xticks(epoques)
-    plt.legend()
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-    plt.title("Training and validation losses ")
-    plt.show()
-    print('Done')
+    # model_dict = torch.load(f'models/UNet10_200_28.06.pt')#, map_location=torch.device('cpu'))
+    # plt.figure()
+    # epoques = np.arange(start=1, stop=11, step=1)
+    # plt.plot(epoques, model_dict['train_loss'], label='Train loss')
+    # plt.plot(epoques, model_dict['test_loss'], label='Validation loss')
+    # # plt.xticks(epoques)
+    # plt.legend()
+    # plt.xlabel('Epochs')
+    # plt.ylabel('Loss')
+    # plt.title("Training and validation losses ")
+    # plt.show()
+    # print('Done')

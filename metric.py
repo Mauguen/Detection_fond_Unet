@@ -18,7 +18,6 @@ def pix_acc(outputs, targets, batch_size):
         acc += correct / np.prod(np.array(output.shape)) / batch_size
     return acc.item()
 
-
 def iou(outputs, targets, batch_size, n_classes):
     """Intersection over union
 

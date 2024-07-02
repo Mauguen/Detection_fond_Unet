@@ -23,7 +23,7 @@ def parse_args():
         description='Make segmentation predicitons'
     )
     parser.add_argument(
-        '--model', type=str, default='UNet10_200_28.06.pt',
+        '--model', type=str, default='UNet10_200_01.07.pt',
         help='model to use for inference'
     )
     parser.add_argument(
@@ -71,7 +71,6 @@ def get_testloader(batch_size, num_worker, freq, data_used):
     return test_dataloader, n
 
 def predict(im, model):
-    model.eval()
     y_pred = model(im)
     pred = torch.argmax(y_pred, dim=1)
     return pred
@@ -117,26 +116,7 @@ def visualize(image, pred, label=None):
     fig.tight_layout()
     plt.show()
 
-if _name_ == '_main_':
-    args = parse_args()
-    exemple = True
-    index_applied = 10000
-    freq_visu = 0
-    data_used = 'train'
-    if data_used == 'train':
-        vertical_res = 0.196416        #m/pix, SCOPES
-    else :
-        vertical_res = 0.0247472  # m/pix, FAROFA3
-
-    # Load model once
-    checkpoint_path = os.path.join(os.getcwd(), f'models/{args.model}')
-    checkpoint = torch.load(checkpoint_path)#, map_location=torch.device('cpu'))
-    model = UNet(n_classes=2, in_channels=1)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    device = (torch.device(f'cuda') if torch.cuda.is_available() else 'cpu')
-    print(device)
-    model.to(device).double()
-
+def colormaps():
     # Récupération de la colormap Reds de matplotlib
     red_colors = plt.cm.Reds(np.linspace(0, 1, 256))
     green_colors = plt.cm.Greens(np.linspace(0, 1, 256))
@@ -152,6 +132,30 @@ if _name_ == '_main_':
     # Création de la nouvelle colormap avec les couleurs modifiées
     red_transparent = colors.LinearSegmentedColormap.from_list('RedTransparent', red_colors)
     green_transparent = colors.LinearSegmentedColormap.from_list('GreenTransparent', green_colors)
+    return red_transparent, green_transparent
+
+if __name__ == '__main__':
+    args = parse_args()
+    exemple = True
+    index_applied = 100
+    freq_visu = 0
+    data_used = 'train'
+    if data_used == 'train':
+        vertical_res = 0.196416        #m/pix, SCOPES
+    else :
+        vertical_res = 0.0247472  # m/pix, FAROFA3
+
+    # Load model once
+    checkpoint_path = os.path.join(os.getcwd(), f'models/{args.model}')
+    checkpoint = torch.load(checkpoint_path)#, map_location=torch.device('cpu'))
+    model = UNet(n_classes=2, in_channels=1)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    device = (torch.device(f'cuda') if torch.cuda.is_available() else 'cpu')
+    print(device)
+    model.to(device).double()
+    model.eval()
+
+    red_transparent, green_transparent = colormaps()
 
     t_ini = time.time()
     dataloader, n = get_testloader(batch_size=args.batch_size, num_worker=args.num_workers, freq='200', data_used=data_used)
@@ -169,17 +173,17 @@ if _name_ == '_main_':
 
         if index_applied in indexs and exemple:
             index = np.where(indexs.cpu().detach().numpy() == index_applied)[0]
-            pred = preds[index].T
-            image = images[index][0, 0].T
-            label = labels[index][0].T
-
-            plt.figure()
-            plt.imshow(image.cpu().detach().numpy())
-            plt.imshow(pred[0], alpha=0.5, cmap=red_transparent)
-            plt.imshow(label.cpu().detach().numpy(), alpha=0.5, cmap=green_transparent)
-            plt.show()
+            pred = preds[index][0]
+            image = images[index][0, 0]
+            label = labels[index][0]
 
             if np.any(np.unique(pred) != 0):
+                plt.figure()
+                plt.imshow(image.cpu().detach().numpy())
+                plt.imshow(pred, cmap=red_transparent)
+                # plt.imshow(label.cpu().detach().numpy(), alpha=0.5, cmap=green_transparent)
+                plt.show()
+
                 ## Confusion matrix
                 conf_matrix = confusion_matrix(label.flatten(), pred.flatten())
                 ## Ping per ping difference

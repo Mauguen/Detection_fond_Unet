@@ -42,18 +42,14 @@ class Binary_Cross_Entropy_Loss(torch.nn.Module):
     def forward(self, pred, target):
         n, C, H, W = pred.shape
         # Calculate log probabilities
-        pred = torch.argmax(pred, dim=1).float()
-        pred.requires_grad = True
-        h_theta = torch.sigmoid(pred)
-        # logp = F.logsigmoid(pred)
+        logp = F.logsigmoid(pred)
 
         # Define weights
         weight_class_0 = 1  # Poids pour la classe majoritaire
         weight_class_1 = H*W # Poids pour la classe minoritaire
 
         # Apply weights to the log probabilities
-        # weighted_logp = weight_class_0 * (target == 0).float() * logp[:, 0] + weight_class_1 * (target == 1).float() * logp[:, 1]
-        weighted_logp = weight_class_0 * (target == 0).float() * torch.log(1-h_theta) + weight_class_1 * (target == 1).float() * torch.log(h_theta)
+        weighted_logp = weight_class_0 * (target == 0).float() * logp[:, 0] + weight_class_1 * (target == 1).float() * logp[:, 1]
 
         # Compute loss
         loss = -weighted_logp.mean()

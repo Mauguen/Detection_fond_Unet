@@ -29,15 +29,15 @@ def parse_args():
         help='input batch size for training (default: 3)'
     )
     parser.add_argument(
-        '--test-batch-size', type=int, default=16, metavar='N',
+        '--test-batch-size', type=int, default=32, metavar='N',
         help='input batch size for testing (default: 3)'
     )
     parser.add_argument(
-        '--epochs', type=int, default=10, metavar='N',
+        '--epochs', type=int, default=32, metavar='N',
         help='number of epochs to train (default: 10)'
     )
     parser.add_argument(
-        '--lr', type=float, default=0.0001, metavar='LR',
+        '--lr', type=float, default=0.00001, metavar='LR',
         help='learning rate (default: 0.0001)'
     )
     parser.add_argument(
@@ -137,7 +137,18 @@ def get_validationloader(batch_size, num_worker, freq):
                                   )
     return validation_dataloader, n
 
-def train(model, device, dataloader, optimizer, criterion, epoch, n):
+def colormaps():
+    red_colors = plt.cm.Reds(np.linspace(0, 1, 256))
+    green_colors = plt.cm.Greens(np.linspace(0, 1, 256))
+    for i in range(red_colors.shape[0]):
+        alpha = i / (red_colors.shape[0] - 1)
+        red_colors[i, 3] = alpha  # Définition de l'alpha pour créer l'effet de fondu
+        green_colors[i, 3] = alpha
+    red_transparent = colors.LinearSegmentedColormap.from_list('RedTransparent', red_colors)
+    green_transparent = colors.LinearSegmentedColormap.from_list('GreenTransparent', green_colors)
+    return red_transparent, green_transparent
+
+def train(model, device, dataloader, optimizer, criterion, epoch, n, img_evo, label_evo):
     """train model for one epoch
 
     Args:
@@ -164,27 +175,22 @@ def train(model, device, dataloader, optimizer, criterion, epoch, n):
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, (step+1) * len(X), n,
                 100. * (step+1)* len(X) / n, loss.item()))
-        if np.round((100. * (step+1)* len(X) / n) % 20, 0) == 0.:       #epoch >= 9 and
-            pred = torch.argmax(y_pred, dim=1)[-1]
-            red_colors = plt.cm.Reds(np.linspace(0, 1, 256))
-            green_colors = plt.cm.Greens(np.linspace(0, 1, 256))
-            for i in range(red_colors.shape[0]):
-                alpha = i / (red_colors.shape[0] - 1)
-                red_colors[i, 3] = alpha  # Définition de l'alpha pour créer l'effet de fondu
-                green_colors[i, 3] = alpha
-            red_transparent = colors.LinearSegmentedColormap.from_list('RedTransparent', red_colors)
-            green_transparent = colors.LinearSegmentedColormap.from_list('GreenTransparent', green_colors)
-
+        if np.round((100. * (step+1)* len(X) / n), 1) == 99:
+            y_pred_evo = model.double().to(device)(img_evo)
+            pred_evo = torch.argmax(y_pred_evo, dim=1)
+            # print(np.unique(pred_evo.cpu().detach().numpy()))
+            red_transparent, green_transparent = colormaps()
             plt.figure()
-            plt.imshow(X[-1][0].cpu().detach().numpy())
-            plt.imshow(pred.cpu().detach().numpy(), cmap=red_transparent)
-            plt.imshow(y[-1].cpu().detach().numpy(), cmap=green_transparent)
-            plt.show()
-            print(f'Detection : {np.count_nonzero(pred.cpu().detach().numpy()) * 100 / np.count_nonzero(y.cpu().detach().numpy())}%')
+            plt.imshow(img_evo[0, 0].cpu().detach().numpy())
+            prediction = plt.imshow(pred_evo[0].cpu().detach().numpy(), cmap=red_transparent, vmin=0, vmax=1)
+            ground_truth =plt.imshow(label_evo[0].cpu().detach().numpy(), cmap=green_transparent, vmin=0, vmax=1)
+            plt.colorbar(prediction)
+            plt.colorbar(ground_truth)
+            print(f'Detection : {np.count_nonzero(pred_evo[0].cpu().detach().numpy())} / {np.count_nonzero(label_evo[0].cpu().detach().numpy())}')
 
     return loss.item()
 
-def validate(model, device, dataloader, criterion, n_classes, n, epoch):
+def validate(model, device, dataloader, criterion, n_classes, n, epoch, img_evo, label_evo):
     """Evaluate model performance with validation data
 
     Args:
@@ -214,9 +220,20 @@ def validate(model, device, dataloader, criterion, n_classes, n, epoch):
     test_loss /= n
     avg_iou = np.mean(class_iou)
 
-    # print('\nValidation set: Average loss: {:.4f}, '.format(test_loss)
-    #     + 'Average IOU score: {:.2f}, '.format(avg_iou)
-    #     + 'Average pixel accuracy: {:.2f}\n'.format(pixel_acc))
+    y_pred_evo = model.double().to(device)(img_evo)
+    pred_evo = torch.argmax(y_pred_evo, dim=1)
+    red_transparent, green_transparent = colormaps()
+    plt.figure()
+    plt.imshow(img_evo[0, 0].cpu().detach().numpy())
+    prediction = plt.imshow(pred_evo[0].cpu().detach().numpy(), cmap=red_transparent, vmin=0, vmax=1)
+    ground_truth = plt.imshow(label_evo[0].cpu().detach().numpy(), cmap=green_transparent, vmin=0, vmax=1)
+    plt.colorbar(prediction)
+    plt.colorbar(ground_truth)
+    print(f'Detection : {np.count_nonzero(pred_evo[0].cpu().detach().numpy())} / {np.count_nonzero(label_evo[0].cpu().detach().numpy())}')
+
+    print('\nValidation set: Average loss: {:.4f}, '.format(test_loss)
+        + 'Average IOU score: {:.2f}, '.format(avg_iou)
+        + 'Average pixel accuracy: {:.2f}\n'.format(pixel_acc))
 
     return test_loss, avg_iou, pixel_acc
 
@@ -277,7 +294,7 @@ def get_model(args, device, in_channels, world_size):
     # torch.distributed.init_process_group(backend='nccl', init_method=f'tcp://{master_addr}:{master_port}', world_size=world_size)
     model = UNet(n_classes, in_channels).cuda() if device == 'cuda' else UNet(n_classes, in_channels)
     # model = DataParallel(model)
-    # model = model.to(device)
+    model = model.to(device)
     # Setup optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     return model, optimizer, model_dict
@@ -297,6 +314,9 @@ def train_model(args, freq, world_size):
     # dataloader
     trainloader, n_train = get_trainloader(args.batch_size, args.num_workers, freq)
     validationloader, n_validation = get_validationloader(args.batch_size, args.num_workers, freq)
+    for step, sample in enumerate(validationloader):
+        img_evo = sample['image'].to(device)
+        label_evo = sample['label'].to(device).squeeze(1).long()
     print(f'{device} : {freq}kHz')
     # train and evaluate model
     start_epoch = 1 if not args.model else model_dict['total_epoch'] + 1
@@ -310,8 +330,8 @@ def train_model(args, freq, world_size):
     for epoch in range(start_epoch, n_epoch + 1):
         print(f'Train Epoch : {epoch}/{n_epoch}')
         t_ini = time.time()
-        train_loss = train(model, device, trainloader, optimizer, criterion, epoch, n_train)
-        test_loss, test_iou, test_pix_acc = validate(model, device, validationloader, criterion, args.n_classes, n_validation, epoch)
+        train_loss = train(model, device, trainloader, optimizer, criterion, epoch, n_train, img_evo, label_evo)
+        test_loss, test_iou, test_pix_acc = validate(model, device, validationloader, criterion, args.n_classes, n_validation, epoch, img_evo, label_evo)
         model_dict['train_loss'].append(train_loss)
         model_dict['test_loss'].append(test_loss)
         model_dict['metrics']['IOU'].append(test_iou)

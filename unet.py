@@ -9,7 +9,7 @@ class UNet(torch.nn.Module):
     https://arxiv.org/pdf/1505.04597.pdf
     """
 
-    def __init__(self, n_classes, in_channels, batch_norm=True):
+    def __init__(self, n_classes, in_channels, batch_norm=False):
         """
         """
         self.name = 'UNet'

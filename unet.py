@@ -8,14 +8,17 @@ class UNet(torch.nn.Module):
     by Olaf Ronneberger, Philipp Fischer, and Thomas Brox (2015)
     https://arxiv.org/pdf/1505.04597.pdf
     """
-
-    def __init__(self, n_classes, in_channels, batch_norm=False):
+    def __init__(self, n_classes, in_channels, batch_norm=False, filter_sizes=None):
         """
         """
         self.name = 'UNet'
         self.n_classes = n_classes
         self.in_channels = in_channels
-        self.filter_sizes = [8, 16]
+        if filter_sizes is None:
+            self.filter_sizes = [8, 16, 32, 64, 128]
+        else:
+             self.filter_sizes = filter_sizes
+
         self.n_block = len(self.filter_sizes)
         self.batch_norm = batch_norm
 
@@ -43,6 +46,7 @@ class UNet(torch.nn.Module):
             x = self.concat(xs[k], x)
             x = block['conv'](x)
 
+        # x = self.segment(x)
         y_pred = self.segment(x)
 
         return y_pred
@@ -108,8 +112,8 @@ class UNet(torch.nn.Module):
 ###############################################################################
 if __name__ == "__main__":
     n_channels = 1
-    im = torch.randn(4, n_channels, 808, 808)
-    model = UNet(n_classes=2, in_channels=n_channels)
+    im = torch.randn(32, n_channels, 100, 100)
+    model = UNet(n_classes=1, in_channels=n_channels)
 
     print(list(model.children()))
     import time

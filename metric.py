@@ -4,7 +4,6 @@ import numpy as np
 
 def pix_acc(outputs, targets, batch_size):
     """Pixel accuracy
-
     Args:
         outputs (torch.nn.Tensor): prediction outputs
         targets (torch.nn.Tensor): prediction targets
@@ -20,7 +19,6 @@ def pix_acc(outputs, targets, batch_size):
 
 def iou(outputs, targets, batch_size, n_classes):
     """Intersection over union
-
     Args:
         outputs (torch.nn.Tensor): prediction outputs
         targets (torch.nn.Tensor): prediction targets

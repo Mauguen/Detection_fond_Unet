@@ -8,37 +8,31 @@ from torch.utils.data import DataLoader, Dataset
 import random
 
 class Echograms(Dataset):
-    """ISBI 2012 EM Cell dataset.
-    """
-    def __init__(self, freq='', root_dir=None, data_type='train', pad=0):
+    def __init__(self, root_dir='D:/PFE/Codes_finaux/data/', data_type='train', pad=0):
         """
         Args:
             root_dir (string): Directory with all the images.
-            data_type (string): either 'train' or 'validate'
+            data_type (string): either 'train', 'validate', 'param' or 'test'
+            pad (integer) : padding
         """
         self.root_dir = os.getcwd() if not root_dir else root_dir
-        path = os.path.join(self.root_dir, f'data{freq}')
-        self.n_classes = 2
+        path = self.root_dir
+        self.n_classes = 1
         self.pad = pad
         
         if data_type == 'train':
-            self.imgs_path = os.path.join(path, 'train-volume.h5')
+            self.imgs_path = os.path.join(path, 'train-volume_FAROFA_SCOPES_PIRATA.h5')
         elif data_type == 'validate':
-            self.imgs_path = os.path.join(path, 'validation-volume.h5')
+            self.imgs_path = os.path.join(path, 'validation-volume_FAROFA_SCOPES_PIRATA.h5')
         elif data_type == 'param':
             self.imgs_path = os.path.join(path, 'parametrage-volume.h5')
         elif data_type == 'test':
-            self.imgs_path = os.path.join(path, 'test-volume.h5')
+            self.imgs_path = os.path.join(path, 'test-volume_all_echogram_200kHz.h5')
             
         with h5py.File(self.imgs_path, 'r') as h5file:
             images = da.from_array(h5file['images'], chunks=(-1, -1, 100, 100))
             self.shape = images.shape
-            # print(self.shape)
             self.n_channels = images.shape[1]
-
-            # # Standard deviation and mean
-            # self.mean = images.mean().compute()
-            # self.std = images.std().compute()
 
     def __len__(self):
         return self.shape[0]
@@ -46,7 +40,6 @@ class Echograms(Dataset):
     def __getitem__(self, idx):
         with h5py.File(self.imgs_path, 'r') as h5file:
             ### Normalization
-            # image = (h5file['images'][idx]- self.mean) / self.std
             image = h5file['images'][idx]/255           #donnees uint8
             label = h5file['labels'][idx]
             c, h, w = self.shape[1], self.shape[2], self.shape[3]
@@ -70,8 +63,9 @@ def seed_worker(worker_id):
     np.random.seed(worker_seed)
     random.seed(worker_seed)
 
-def get_dataloader(batch_size, num_worker, freq='200'):
-    data = Echograms(freq)
+def get_dataloader(batch_size, num_worker):
+    data = Echograms()
+    print(len(data))
     g = torch.Generator()
     g.manual_seed(0)
     train_dataloader = DataLoader(data,
@@ -82,7 +76,6 @@ def get_dataloader(batch_size, num_worker, freq='200'):
                                   generator=g
                                   )
     return train_dataloader
-
 
 def visualize(image, mask):
     fig = plt.figure()
@@ -95,14 +88,17 @@ def visualize(image, mask):
 
     plt.show()
 
-
 if __name__ == '__main__':
     batch_size = 5
     num_worker = 6
     dataloader = get_dataloader(batch_size, num_worker)
 
+    no_bottom = 0
     for step, sample in enumerate(dataloader):
         X = sample['image']
         y = sample['label']
-        print(X.shape)
-        break
+        for i in range(X.shape[0]):
+            if np.all(np.array(y[i, 0]) == 0):
+                no_bottom += 1
+        print(step*batch_size, no_bottom)
+    print(no_bottom)

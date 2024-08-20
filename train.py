@@ -302,7 +302,7 @@ def train_model(args, freq, world_size):
             model_dict['metrics']['best']['pix_acc'] = test_pix_acc
             model_dict['metrics']['best']['epoch'] = epoch
         if args.save and test_loss < test_loss_prev and epoch % 5 == 0:
-            model_name = f'models/models_mixte_FAROFA_SCOPES/{model.name}{epoch}_{freq}.pt'
+            model_name = f'models/{model.name}{epoch}_{freq}.pt'
             torch.save(model_dict, model_name)
         t_fin = time.time()
         model_dict['epoch_duration'] = t_fin-t_ini

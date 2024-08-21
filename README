@@ -3,7 +3,7 @@ To do so, we used a convolutional neural network with a U-Net architecture. .
 
 The aim of each of the scripts hereby provided is listed below :
 - echograms.py : creation of the Echogram class that charges the data for training, validation and testing purposes.
-- metric.py : functions that calculate the IOU and pixel accuracy during validation phases
+- metric.py : functions that calculate the Intersection over Union (IoU) and pixel accuracy during validation phases
 - unet.py : contains the Unet class of the model architecture
 - train.py : training script. It calls all of the previous scripts to proceed with the training with parameters are defined in the parse_args() function
 - inference.py : script that is used to test the trained neural network both on both single samples and on a lot of samples

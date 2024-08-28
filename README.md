@@ -11,6 +11,7 @@ The aim of each of the scripts hereby provided is listed below :
 - train.py : training script. It calls all of the previous scripts to proceed with the training with parameters are defined in the parse_args() function
 - inference.py : script that is used to test the trained neural network both on both single samples and on a lot of samples
 - parametrage.py : script to compute the most fitting parameters for the neural network. 
+
 The last two scripts are the ones that you need to launch to create, train and test your own CNN U-Net. 
 Before running them, insure that you have modified the args.rootdir in the main of the code to put the directory in which you put the codes. 
 Moreover, modify the root_dir in functions get_trainloader (train.py), get_validationloader (train.py) and get_testloader (inference.py). 

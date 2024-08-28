@@ -1,6 +1,7 @@
 These codes were created to insure accurate bottom detection on split-beam EK80 and EK60 echosounder echograms. 
 To do so, we used a convolutional neural network with a U-Net architecture. .
 The libraries needed to run the scripts are installed with the following command :
+
 __pip install numpy matplotlib scikit-image scikit-learn tensorboard torch torchvision pillow tqdm scipy h5py tifffile dask argparse__
 
 The aim of each of the scripts hereby provided is listed below :

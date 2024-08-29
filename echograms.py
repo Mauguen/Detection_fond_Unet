@@ -1,3 +1,18 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% echograms.py
+% -------------------------------
+% Summary : classe Echogram used to load samples with Pytorch's DataLoader
+% -------------------------------
+% Author : Lénais Mauguen - IRD
+% Date : 2024/08/30
+% -------------------------------
+% INPUTS:
+% - root_dir : folder containing the data to train, validate or test the CNN
+% - data_type : usage of data thus loaded
+% OUTPUTS:
+% - dataloader
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 import os
 import numpy as np
 import matplotlib.pyplot as plt

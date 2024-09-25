@@ -10,6 +10,7 @@ The aim of each of the scripts hereby provided is listed below :
 - unet.py : contains the Unet class of the model architecture
 - train.py : training script. It calls all of the previous scripts to proceed with the training with parameters are defined in the parse_args() function
 - inference.py : script that is used to test the trained neural network both on both single samples and on a lot of samples
+- inference_new_cruise.py : script that is used to test the trained neural network both on a new cruise from Matecho Matlab matrix Echogram.mat
 - parametrage.py : script to compute the most fitting parameters for the neural network. 
 
 The last two scripts are the ones that you need to launch to create, train and test your own CNN U-Net. 

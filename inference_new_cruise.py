@@ -26,6 +26,7 @@ import matplotlib
 from datetime import datetime
 import h5py
 import dask.array as da
+from scipy.io import savemat, loadmat
 
 from unet import UNet
 import matplotlib.colors as colors
@@ -242,15 +243,19 @@ def final_visu(echogram, freq, indice_freq, file_bottom_name):
             # Extract sections
             Echogram = file[f'Echogram{freq}'][a:b, :r].T
             echograms.append(Echogram)
-
-    CleanBottom = np.load(f'{file_bottom_name}').flatten()
-
+    # Numpy format
+    # CleanBottom = np.load(f'{file_bottom_name}', allow_pickle=True).flatten()
+    # Matlab format
+    data = loadmat(f'{file_bottom_name}')
+    CleanBottom = data['bottom_line_pred_tot'].flatten()
     for i in range(0, len(echograms)):
         plt.figure()
         plt.imshow(echograms[i])
         plt.plot(CleanBottom[i * width: (i + 1) * width], color='r', alpha=0.5)
+        image_path = f'{echogram}Images_fond_corrigé/echogram{i}'
+        plt.savefig(image_path)
         plt.show()
-
+        plt.close()
 
 # Main function to execute the script
 if __name__ == '__main__':
@@ -336,8 +341,12 @@ if __name__ == '__main__':
             bottom_line_pred_tot.append(bottom_line_pred)
 
     # Save and visualize the final results
-    np.save(file=f'{echogram}CleanBottom_{campagne}_{freq}kHz', arr=np.array(bottom_line_pred_tot))
-    final_visu(echogram, freq, indice_freq, f'{echogram}CleanBottom_{campagne}_{freq}kHz.npy')
+    # Matlab format
+    savemat(f'{echogram}CleanBottom_{campagne}_{freq}kHz.mat', {'bottom_line_pred_tot': np.array(bottom_line_pred_tot)})
+    final_visu(echogram, freq, indice_freq, f'{echogram}CleanBottom_{campagne}_{freq}kHz.mat')
+    # Numpy format
+    # np.save(file=f'{echogram}CleanBottom_{campagne}_{freq}kHz', arr=np.array(bottom_line_pred_tot))
+    # final_visu(echogram, freq, indice_freq, f'{echogram}CleanBottom_{campagne}_{freq}kHz.npy')
 
     t_fin = time.time()
     print(f'Execution time: {(t_fin - t_ini) / n:.2f} s/ping')

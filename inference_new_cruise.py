@@ -1,5 +1,5 @@
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-# % echograms.py
+# % inference_new_cruise.py
 # % -------------------------------
 # % Summary : script used to predict the bottom line on echograms with the CNN previously trained with Pytorch
 # % -------------------------------
@@ -47,7 +47,7 @@ def extraction_1freq(echogram, freq, indice_freq, file_name, patchs_size):
             # Extracting necessary parameters
             # Bottoms
             Bottom = np.array(file2['Bottom'][a:b, indice_freq]).reshape((-1, 1))
-
+            
             # Calculating median, max, min for image cropping
             med = int(np.nanmedian(Bottom) / res_echantillonnage)
             max_echo = file2[f'Echogram{freq}'].shape[1]
@@ -243,11 +243,10 @@ def final_visu(echogram, freq, indice_freq, file_bottom_name):
             # Extract sections
             Echogram = file[f'Echogram{freq}'][a:b, :r].T
             echograms.append(Echogram)
-    # Numpy format
+
     # CleanBottom = np.load(f'{file_bottom_name}', allow_pickle=True).flatten()
-    # Matlab format
     data = loadmat(f'{file_bottom_name}')
-    CleanBottom = data['bottom_line_pred_tot'].flatten()
+    CleanBottom = data['bottom_line_pred_tot']
     for i in range(0, len(echograms)):
         plt.figure()
         plt.imshow(echograms[i])
@@ -341,10 +340,8 @@ if __name__ == '__main__':
             bottom_line_pred_tot.append(bottom_line_pred)
 
     # Save and visualize the final results
-    # Matlab format
-    savemat(f'{echogram}CleanBottom_{campagne}_{freq}kHz.mat', {'bottom_line_pred_tot': np.array(bottom_line_pred_tot)})
+    savemat(f'{echogram}CleanBottom_{campagne}_{freq}kHz.mat', {'bottom_line_pred_tot': np.array(bottom_line_pred_tot).flatten().reshape((1, -1))})
     final_visu(echogram, freq, indice_freq, f'{echogram}CleanBottom_{campagne}_{freq}kHz.mat')
-    # Numpy format
     # np.save(file=f'{echogram}CleanBottom_{campagne}_{freq}kHz', arr=np.array(bottom_line_pred_tot))
     # final_visu(echogram, freq, indice_freq, f'{echogram}CleanBottom_{campagne}_{freq}kHz.npy')
 

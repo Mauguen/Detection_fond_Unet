@@ -229,6 +229,13 @@ def colormaps():
     green_transparent = colors.LinearSegmentedColormap.from_list('GreenTransparent', green_colors)
     return red_transparent, green_transparent
 
+# Function to compute the patches size
+def closest_divisor_to_100(x):
+        # Find all divisors of x by checking which numbers from 1 to x divide x without a remainder
+        divisors = [i for i in range(1, x + 1) if x % i == 0]
+        # Find the divisor that has the smallest difference from 100
+        closest = min(divisors, key=lambda d: abs(d - 100))
+        return closest
 
 # Function to create final visualizations of the echogram and bottom line predictions.
 def final_visu(echogram, freq, indice_freq, file_bottom_name):
@@ -260,7 +267,6 @@ def final_visu(echogram, freq, indice_freq, file_bottom_name):
 if __name__ == '__main__':
     args = parse_args()
     display = True
-    patchs_size = 100
     campagne = input('Campaign name to process: ')
     echogram = input("Location of the data? Example: D:/PFE/Detection_fond/Extraction_donnees/ ")
     echogram = echogram.replace("\\", "/")
@@ -273,6 +279,11 @@ if __name__ == '__main__':
     freq = input(f"Working frequency? Available frequencies: {freqs} ")
     indice_freq = freqs.index(freq)
     file_name = f'{echogram}imagettes.h5'
+    with h5py.File(f'{echogram}Echogram.mat', 'r') as file2:
+        length_echo = file2[f'Echogram{freq}'].shape[0]
+    # patchs_size = 100
+    patchs_size = closest_divisor_to_100(length_echo)
+    print(f'Taille des patchs : {patchs_size}')
 
     # Extract data for the selected frequency and save to HDF5
     extraction_1freq(echogram, freq, indice_freq, file_name, patchs_size)

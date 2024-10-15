@@ -279,11 +279,11 @@ if __name__ == '__main__':
     freq = input(f"Working frequency? Available frequencies: {freqs} ")
     indice_freq = freqs.index(freq)
     file_name = f'{echogram}imagettes.h5'
-    with h5py.File(f'{echogram}Echogram.mat', 'r') as file2:
-        length_echo = file2[f'Echogram{freq}'].shape[0]
-    # patchs_size = 100
-    patchs_size = closest_divisor_to_100(length_echo)
-    print(f'Taille des patchs : {patchs_size}')
+    # with h5py.File(f'{echogram}Echogram.mat', 'r') as file2:
+    #     length_echo = file2[f'Echogram{freq}'].shape[0]
+    # patchs_size = closest_divisor_to_100(length_echo)
+    # print(f'Taille des patchs : {patchs_size}')
+    patchs_size = 100
 
     # Extract data for the selected frequency and save to HDF5
     extraction_1freq(echogram, freq, indice_freq, file_name, patchs_size)

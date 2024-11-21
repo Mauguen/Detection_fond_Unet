@@ -84,7 +84,7 @@ def extraction_1freq(echogram, freq, indice_freq, file_name, patchs_size):
         h5file.create_dataset('images', data=np.array(test).reshape((nb_imgs, 1, patchs_size, patchs_size)).astype('uint8'), compression="gzip", compression_opts=9, dtype='uint8')
         h5file.create_dataset('c', data=np.array(cs).reshape((nb_imgs)), compression="gzip", compression_opts=9)
         h5file.create_dataset('d', data=np.array(ds).reshape((nb_imgs)), compression="gzip", compression_opts=9)
-    return extra_pings, pings_complete_patchs
+    return extra_pings, pings_complete_patchs, res_echantillonnage
 
 
 # Dataset class for loading and processing echogram data.
@@ -231,28 +231,32 @@ def colormaps():
     return red_transparent, green_transparent
 
 # Function to create final visualizations of the echogram and bottom line predictions.
-def final_visu(echogram, freq, indice_freq, file_bottom_name):
+def final_visu(echogram, freq, indice_freq, file_bottom_name, res_echantillonnage):
     echograms = []
     width = 10000
     r = 4000
+    CleanBottom = np.load(f'{file_bottom_name}', allow_pickle=True)
     with h5py.File(f'{echogram}Echogram.mat', 'r') as file:
         nb_imgs = int(file[f'Echogram{freq}'].shape[0] / width)
+        plt.figure()
+        plt.plot(CleanBottom, c='r', alpha=0.5)
+        plt.plot(np.array(file['Bottom'][:, indice_freq]).reshape((-1, 1)), c='b')
+        plt.show()
         for i in range(nb_imgs):
             a, b = i * width, (i + 1) * width
 
             # Extract sections
             Echogram = file[f'Echogram{freq}'][a:b, :r].T
             echograms.append(Echogram)
+            
+            Depth = np.array(file[f'Depth{freq}']).T
 
-    CleanBottom = np.load(f'{file_bottom_name}', allow_pickle=True)
     for i in range(0, len(echograms)):
         plt.figure()
         plt.imshow(echograms[i])
-        # plt.plot(times[i], CleanBottom[i * width: (i + 1) * width], color='r', alpha=0.5)
-        plt.plot(CleanBottom[i * width: (i + 1) * width], color='r', alpha=0.5)
+        plt.plot(CleanBottom[i * width: (i + 1) * width]/res_echantillonnage, color='r', alpha=0.5)
         image_path = f'{echogram}Images_fond_corrigé/echogram{i}'
         plt.savefig(image_path)
-        # plt.show()
         plt.close()
 
 # Main function to execute the script
@@ -271,14 +275,10 @@ if __name__ == '__main__':
     freq = input(f"Working frequency? Available frequencies: {freqs} ")
     indice_freq = freqs.index(freq)
     file_name = f'{echogram}imagettes.h5'
-    # with h5py.File(f'{echogram}Echogram.mat', 'r') as file2:
-    #     length_echo = file2[f'Echogram{freq}'].shape[0]
-    # patchs_size = closest_divisor_to_100(length_echo)
-    # print(f'Taille des patchs : {patchs_size}')
     patchs_size = 100
 
     # Extract data for the selected frequency and save to HDF5
-    extra_pings, pings_complete_patchs = extraction_1freq(echogram, freq, indice_freq, file_name, patchs_size)
+    extra_pings, pings_complete_patchs, res_echantillonnage = extraction_1freq(echogram, freq, indice_freq, file_name, patchs_size)
 
     # Load test data
     dataloader, n = get_testloader(batch_size=args.batch_size, num_worker=args.num_workers, root_dir=file_name)
@@ -347,7 +347,7 @@ if __name__ == '__main__':
             if current_index == pings_complete_patchs:
                 bottom_line_pred = np.argmax(pred, axis=0)[-extra_pings:] + c
                 bottom_line_pred_tot[current_index:current_index + extra_pings, 0] = bottom_line_pred
-                current_index += extra_pings  # Mise à jour de l'indice
+                current_index += extra_pings
             else:
                 bottom_line_pred = np.argmax(pred, axis=0) + c
                 bottom_line_pred_tot[current_index:current_index + patchs_size, 0] = bottom_line_pred
@@ -355,9 +355,9 @@ if __name__ == '__main__':
                 # print(f'{current_index} / {pings_complete_patchs}')
                 
     # Save and visualize the final results
-    savemat(f'{echogram}CleanBottom_{campagne}_{freq}kHz.mat', {'bottom_line_pred_tot': np.array(bottom_line_pred_tot).flatten().reshape((1, -1))})
-    np.save(file=f'{echogram}CleanBottom_{campagne}_{freq}kHz', arr=np.array(bottom_line_pred_tot).flatten())
-    final_visu(echogram, freq, indice_freq, f'{echogram}CleanBottom_{campagne}_{freq}kHz.npy')
+    savemat(f'{echogram}CleanBottom_{campagne}_{freq}kHz.mat', {'bottom_line_pred_tot': np.array(bottom_line_pred_tot * res_echantillonnage).flatten().reshape((1, -1))})
+    np.save(file=f'{echogram}CleanBottom_{campagne}_{freq}kHz', arr=np.array(bottom_line_pred_tot * res_echantillonnage).flatten())
+    final_visu(echogram, freq, indice_freq, f'{echogram}CleanBottom_{campagne}_{freq}kHz.npy', res_echantillonnage)
 
     t_fin = time.time()
     print(f'Execution time: {(t_fin - t_ini) / n:.2f} s/ping')
